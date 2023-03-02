@@ -366,14 +366,27 @@ pub fn instrument(
 ) -> proc_macro::TokenStream {
     let args = syn::parse_macro_input!(args as attr::InstrumentArgs);
     // Cloning a `TokenStream` is cheap since it's reference counted internally.
-    instrument_precise(args.clone(), item.clone())
-        .unwrap_or_else(|_err| instrument_speculative(args, item))
+    instrument_precise(args.clone(), item.clone(), true)
+        .unwrap_or_else(|_err| instrument_speculative(args, item, true))
+}
+
+/// Emits an event without creating a `tracing` [span] every time
+/// the function is called.
+#[proc_macro_attribute]
+pub fn trace_return(
+    args: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let args = syn::parse_macro_input!(args as attr::TraceReturnArgs);
+    instrument_precise(args.clone().into(), item.clone(), false)
+        .unwrap_or_else(|_err| instrument_speculative(args.into(), item, false))
 }
 
 /// Instrument the function, without parsing the function body (instead using the raw tokens).
 fn instrument_speculative(
     args: attr::InstrumentArgs,
     item: proc_macro::TokenStream,
+    with_span: bool,
 ) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(item as MaybeItemFn);
     let instrumented_function_name = input.sig.ident.to_string();
@@ -382,6 +395,7 @@ fn instrument_speculative(
         args,
         instrumented_function_name.as_str(),
         None,
+        with_span,
     )
     .into()
 }
@@ -391,6 +405,7 @@ fn instrument_speculative(
 fn instrument_precise(
     args: attr::InstrumentArgs,
     item: proc_macro::TokenStream,
+    with_span: bool,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
     let input = syn::parse::<ItemFn>(item)?;
     let instrumented_function_name = input.sig.ident.to_string();
@@ -405,7 +420,7 @@ fn instrument_precise(
     // check for async_trait-like patterns in the block, and instrument
     // the future instead of the wrapper
     if let Some(async_like) = expand::AsyncInfo::from_fn(&input) {
-        return async_like.gen_async(args, instrumented_function_name.as_str());
+        return async_like.gen_async(args, instrumented_function_name.as_str(), with_span);
     }
 
     let input = MaybeItemFn::from(input);
@@ -415,6 +430,7 @@ fn instrument_precise(
         args,
         instrumented_function_name.as_str(),
         None,
+        with_span,
     )
     .into())
 }

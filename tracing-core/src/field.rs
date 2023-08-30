@@ -1,8 +1,8 @@
 //! Span and `Event` key-value data.
 //!
-//! Spans and events may be annotated with key-value data, referred to as known
-//! as _fields_. These fields consist of a mapping from a key (corresponding to
-//! a `&str` but represented internally as an array index) to a [`Value`].
+//! Spans and events may be annotated with key-value data, known as _fields_.
+//! These fields consist of a mapping from a key (corresponding to a `&str` but
+//! represented internally as an array index) to a [`Value`].
 //!
 //! # `Value`s and `Collect`s
 //!
@@ -373,6 +373,10 @@ macro_rules! impl_one_value {
         impl $crate::sealed::Sealed for $value_ty {}
         impl $crate::field::Value for $value_ty {
             fn record(&self, key: &$crate::field::Field, visitor: &mut dyn $crate::field::Visit) {
+                // `op` is always a function; the closure is used because
+                // sometimes there isn't a real function corresponding to that
+                // operation. the clippy warning is not that useful here.
+                #[allow(clippy::redundant_closure_call)]
                 visitor.$record(key, $op(*self))
             }
         }
@@ -388,6 +392,10 @@ macro_rules! impl_one_value {
         impl $crate::sealed::Sealed for ty_to_nonzero!($value_ty) {}
         impl $crate::field::Value for ty_to_nonzero!($value_ty) {
             fn record(&self, key: &$crate::field::Field, visitor: &mut dyn $crate::field::Visit) {
+                // `op` is always a function; the closure is used because
+                // sometimes there isn't a real function corresponding to that
+                // operation. the clippy warning is not that useful here.
+                #[allow(clippy::redundant_closure_call)]
                 visitor.$record(key, $op(self.get()))
             }
         }
@@ -978,8 +986,9 @@ mod test {
     use super::*;
     use crate::metadata::{Kind, Level, Metadata};
 
-    struct TestCallsite1;
-    static TEST_CALLSITE_1: TestCallsite1 = TestCallsite1;
+    // Make sure TEST_CALLSITE_* have non-zero size, so they can't be located at the same address.
+    struct TestCallsite1(u8);
+    static TEST_CALLSITE_1: TestCallsite1 = TestCallsite1(0);
     static TEST_META_1: Metadata<'static> = metadata! {
         name: "field_test1",
         target: module_path!(),
@@ -999,8 +1008,8 @@ mod test {
         }
     }
 
-    struct TestCallsite2;
-    static TEST_CALLSITE_2: TestCallsite2 = TestCallsite2;
+    struct TestCallsite2(u8);
+    static TEST_CALLSITE_2: TestCallsite2 = TestCallsite2(0);
     static TEST_META_2: Metadata<'static> = metadata! {
         name: "field_test2",
         target: module_path!(),
